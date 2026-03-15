@@ -21,15 +21,25 @@ if "agg_level" not in st.session_state:
     st.session_state["agg_level"] = "Daily"
 
 # --- 3. WEBRTC & MULTIMODAL PROCESSOR ---
-mp_hands = mp.solutions.hands
+try:
+    import mediapipe as mp
+    mp_hands = mp.solutions.hands
+    HAS_MEDIAPIPE = True
+except (ImportError, AttributeError):
+    mp_hands = None
+    HAS_MEDIAPIPE = False
 
 class MultimodalProcessor(VideoProcessorBase):
     def __init__(self):
-        self.hands = mp_hands.Hands(
-            min_detection_confidence=0.7,
-            min_tracking_confidence=0.7,
-            max_num_hands=1
-        )
+        if HAS_MEDIAPIPE:
+            self.hands = mp_hands.Hands(
+                min_detection_confidence=0.7,
+                min_tracking_confidence=0.7,
+                max_num_hands=1
+            )
+        else:
+            self.hands = None
+            
         self.result_queue = queue.Queue(maxsize=1)
         self.frame_skip = 0
 
@@ -43,29 +53,32 @@ class MultimodalProcessor(VideoProcessorBase):
             emotion = None
             
             # Gesture Recognition
-            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            results = self.hands.process(img_rgb)
-            
-            if results.multi_hand_landmarks:
-                for hand_landmarks in results.multi_hand_landmarks:
-                    fingers_up = 0
-                    tips = [8, 12, 16, 20]
-                    pips = [6, 10, 14, 18]
-                    
-                    for tip, pip in zip(tips, pips):
-                        if hand_landmarks.landmark[tip].y < hand_landmarks.landmark[pip].y:
+            if HAS_MEDIAPIPE and self.hands:
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                results = self.hands.process(img_rgb)
+                
+                if results.multi_hand_landmarks:
+                    for hand_landmarks in results.multi_hand_landmarks:
+                        fingers_up = 0
+                        tips = [8, 12, 16, 20]
+                        pips = [6, 10, 14, 18]
+                        
+                        for tip, pip in zip(tips, pips):
+                            if hand_landmarks.landmark[tip].y < hand_landmarks.landmark[pip].y:
+                                fingers_up += 1
+                                
+                        # Thumb
+                        if hand_landmarks.landmark[4].x < hand_landmarks.landmark[3].x:
                             fingers_up += 1
                             
-                    # Thumb
-                    if hand_landmarks.landmark[4].x < hand_landmarks.landmark[3].x:
-                        fingers_up += 1
-                        
-                    if fingers_up >= 4:
-                        gesture = "Open Hand"
-                    elif fingers_up == 2:
-                        gesture = "Peace"
-                    elif fingers_up == 0:
-                        gesture = "Fist"
+                        if fingers_up >= 4:
+                            gesture = "Open Hand"
+                        elif fingers_up == 2:
+                            gesture = "Peace"
+                        elif fingers_up == 0:
+                            gesture = "Fist"
+            else:
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             
             # Emotion Recognition
             try:
@@ -86,6 +99,8 @@ class MultimodalProcessor(VideoProcessorBase):
 # --- 4. UI SIDEBAR: START WEBRTC ---
 st.sidebar.title("Multimodal Controls")
 st.sidebar.markdown("Use your webcam for Gesture & Emotion control.")
+if not HAS_MEDIAPIPE:
+    st.sidebar.warning("⚠️ MediaPipe installation currently lacks Python 3.11+ Protobuf compatibility. Gestures disabled. Emotion detection active.")
 
 webrtc_ctx = webrtc_streamer(
     key="multimodal",
