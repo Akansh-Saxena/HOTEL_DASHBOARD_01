@@ -1,0 +1,42 @@
+services: 
+  db: 
+    image: postgres:15 
+    environment: 
+      POSTGRES_USER: aether_user 
+      POSTGRES_PASSWORD: aether_password 
+      POSTGRES_DB: aether_cache 
+    ports: 
+      - "5432:5432" 
+    volumes: 
+      - postgres_data:/var/lib/postgresql/data 
+    healthcheck: 
+      test: ["CMD-SHELL", "pg_isready -U aether_user -d aether_cache"] 
+      interval: 5s 
+      timeout: 5s 
+      retries: 5 
+ 
+  backend: 
+    build: 
+      context: . 
+      dockerfile: Dockerfile.backend 
+    ports: 
+      - "8000:8000" 
+    environment: 
+      - DATABASE_URL=postgresql+asyncpg://aether_user:aether_password@db/aether_cache 
+    depends_on: 
+      db: 
+        condition: service_healthy 
+ 
+  frontend: 
+    build: 
+      context: . 
+      dockerfile: Dockerfile.frontend 
+    ports: 
+      - "8501:8501" 
+    environment: 
+      - BACKEND_URL=http://backend:8000 
+    depends_on: 
+      - backend 
+ 
+volumes: 
+  postgres_data: 
