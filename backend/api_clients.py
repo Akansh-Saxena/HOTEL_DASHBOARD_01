@@ -4,6 +4,9 @@ import asyncio
 import logging
 import random
 
+# --- AUTHOR: AKANSH SAXENA ---
+# --- MODULE 2: GLOBAL META-SEARCH AGGREGATOR ---
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

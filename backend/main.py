@@ -94,6 +94,9 @@ class HotelSearchResponse(BaseModel):
     dates: Dict[str, str]
     rates: List[HotelRate]
 
+# --- AUTHOR: AKANSH SAXENA ---
+# --- MODULES 3 & 4: PAYMENT GATEWAY & DUAL NOTIFICATIONS ---
+
 class NotifyRequest(BaseModel):
     user_email: EmailStr
     phone_number: str = Field(..., description="WhatsApp capable phone number with country code")
