@@ -5,32 +5,12 @@ from datetime import datetime, timedelta
 from email.message import EmailMessage
 from typing import Any, Dict, List, Optional
 
-import cv2
-import numpy as np
 from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
-
-# Multimodal libraries
-try:
-    from deepface import DeepFace
-except ImportError:
-    DeepFace = None
-
-try:
-    import mediapipe as mp
-    mp_hands = mp.solutions.hands
-    hands_detector = mp_hands.Hands(
-        static_image_mode=True, 
-        max_num_hands=1, 
-        min_detection_confidence=0.9
-    )
-except ImportError:
-    mp = None
-    hands_detector = None
 
 # Twilio
 try:
@@ -96,15 +76,6 @@ class VerifyOTPRequest(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
-
-class MultimodalRequest(BaseModel):
-    frame_data: str = Field(..., description="Base64 encoded image frame")
-
-class MultimodalResponse(BaseModel):
-    emotion: str
-    emotion_confidence: float
-    gesture: str
-    gesture_confidence: float
 
 class HotelSearchRequest(BaseModel):
     city_code: str = Field(..., min_length=3, max_length=3, description="IATA City Code (e.g., NYC, PAR)")
@@ -278,66 +249,6 @@ async def get_dashboard_analytics(current_user: dict = Depends(get_current_user)
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analytics processing failed: {str(e)}")
-
-@app.post("/api/analyze-multimodal", response_model=MultimodalResponse)
-async def analyze_multimodal(request: MultimodalRequest, current_user: dict = Depends(get_current_user)):
-    """Accepts base64 image/video frames. Uses DeepFace and MediaPipe for analysis returning >90% confidences."""
-    try:
-        # Decode base64 image
-        if ',' in request.frame_data:
-            encoded_data = request.frame_data.split(',')[1]
-        else:
-            encoded_data = request.frame_data
-
-        nparr = np.frombuffer(base64.b64decode(encoded_data), np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if img is None:
-            raise ValueError("Invalid image data. Could not decode base64 string.")
-
-        # 1. Emotion Detection (DeepFace)
-        emotion_result = "Unknown"
-        emotion_conf = 0.0
-        if DeepFace:
-            try:
-                # DeepFace analyze
-                results = DeepFace.analyze(img, actions=['emotion'], enforce_detection=False)
-                res = results[0] if isinstance(results, list) else results
-                
-                emotion_result = res['dominant_emotion']
-                emotion_conf = float(res['emotion'][emotion_result])
-                
-                # Check 90%+ confidence threshold
-                if emotion_conf < 90.0:
-                    emotion_result = "Uncertain"
-            except Exception as e:
-                print(f"DeepFace processing error: {e}")
-        
-        # 2. Gesture Recognition (MediaPipe)
-        gesture_result = "None"
-        gesture_conf = 0.0
-        if mp and 'hands_detector' in globals() and hands_detector:
-            img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            results = hands_detector.process(img_rgb)
-            
-            if results.multi_hand_landmarks:
-                # Mock gesture classification logic based on hand presence
-                gesture_result = "Hand Detected (Active)"
-                # Returning 95.5 as a >90% confident Mock because the hand map matched
-                gesture_conf = 95.5
-            else:
-                gesture_result = "No Gesture"
-                gesture_conf = 0.0
-
-        return MultimodalResponse(
-            emotion=emotion_result,
-            emotion_confidence=round(emotion_conf, 2),
-            gesture=gesture_result,
-            gesture_confidence=round(gesture_conf, 2)
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Image processing failed: {str(e)}")
 
 # ==========================================
 # GLOBAL HOTEL API ENDPOINT

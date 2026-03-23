@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getToken, removeToken, fetchWithAuth } from "@/lib/auth";
-import Webcam from "react-webcam";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 const loadRazorpayScript = () => {
@@ -21,12 +20,6 @@ export default function DashboardPage() {
   const [hotels, setHotels] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<{revenue: any[], occupancy: any[]}>({revenue: [], occupancy: []});
   const router = useRouter();
-  
-  // Multimodal state
-  const webcamRef = useRef<Webcam>(null);
-  const [emotion, setEmotion] = useState("Scanning...");
-  const [gesture, setGesture] = useState("Scanning...");
-  const [analyzing, setAnalyzing] = useState(false);
 
   const [notifying, setNotifying] = useState<string | null>(null);
   const [analyzingSentiment, setAnalyzingSentiment] = useState<string | null>(null);
@@ -72,39 +65,6 @@ export default function DashboardPage() {
 
     fetchData();
   }, [router, API_URL]);
-
-  const captureAndAnalyze = useCallback(async () => {
-    if (!webcamRef.current) return;
-    const imageSrc = webcamRef.current.getScreenshot();
-    if (!imageSrc) return;
-
-    setAnalyzing(true);
-    try {
-      const res = await fetchWithAuth(`${API_URL}/api/analyze-multimodal`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ frame_data: imageSrc })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setEmotion(`Emotion: ${data.emotion} (${data.emotion_confidence}%)`);
-        setGesture(`Gesture: ${data.gesture} (${data.gesture_confidence}%)`);
-      }
-    } catch (e) {
-      console.error(e);
-      setEmotion("Failed to analyze");
-    } finally {
-      setAnalyzing(false);
-    }
-  }, [API_URL]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      captureAndAnalyze();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [captureAndAnalyze]);
 
   const handleLogout = () => {
     removeToken();
@@ -327,38 +287,6 @@ export default function DashboardPage() {
                </div>
             )}
           </section>
-
-          {/* Multimodal Sidebar */}
-          <aside className="w-full lg:w-96 flex flex-col gap-6">
-            <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-2xl relative">
-              <div className="p-4 border-b border-gray-700 bg-gray-800/80 backdrop-blur top-0 z-10 flex justify-between items-center">
-                <h3 className="text-sm font-bold tracking-widest text-gray-300 uppercase">A.I. Analysis</h3>
-                <span className={`w-2 h-2 rounded-full ${analyzing ? "bg-amber-400 animate-ping" : "bg-emerald-500"}`}></span>
-              </div>
-              <div className="aspect-video bg-black relative">
-                 <Webcam 
-                    audio={false}
-                    ref={webcamRef}
-                    screenshotFormat="image/jpeg"
-                    className="w-full h-full object-cover"
-                    videoConstraints={{ facingMode: "user" }}
-                 />
-                 {/* Reticle Overlay */}
-                 <div className="absolute inset-0 border-4 border-blue-500/20 pointer-events-none rounded-sm"></div>
-              </div>
-              
-              <div className="p-5 flex flex-col gap-3">
-                 <div className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-800">
-                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Emotion</span>
-                   <span className="text-sm font-bold text-blue-400">{emotion}</span>
-                 </div>
-                 <div className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-800">
-                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Gesture</span>
-                   <span className="text-sm font-bold text-amber-400">{gesture}</span>
-                 </div>
-              </div>
-            </div>
-          </aside>
         </div>
       </div>
     </div>

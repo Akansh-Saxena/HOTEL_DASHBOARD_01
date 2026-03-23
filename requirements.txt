@@ -1,17 +1,10 @@
 streamlit==1.32.0 
 pandas 
 plotly 
-opencv-python-headless 
-av 
 httpx 
-mediapipe 
-deepface 
-streamlit-webrtc 
 fastapi 
 uvicorn 
 sqlalchemy 
-psycopg2-binary 
-asyncpg 
 pydantic-settings
 passlib[bcrypt]
 python-jose[cryptography]
