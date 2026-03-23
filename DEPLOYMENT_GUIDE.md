@@ -25,6 +25,9 @@ Render provides a fast and free way to deploy Python web services.
    - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 5. **Environment Variables**: Click on "Advanced" to add Env Vars:
    - `SECRET_KEY`: `your_super_secret_jwt_key_here`
+   - `AMADEUS_API_KEY`: `your_amadeus_key` (Optional)
+   - `AMADEUS_API_SECRET`: `your_amadeus_secret` (Optional)
+   - `GOOGLE_PLACES_API_KEY`: `your_google_key` (Optional)
 6. **Deploy**: Click **Create Web Service**. 
 7. **Copy URL**: Once live, copy your new global API URL (e.g., `https://aether-api.onrender.com`).
 
