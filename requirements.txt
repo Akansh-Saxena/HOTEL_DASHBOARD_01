@@ -12,3 +12,9 @@ uvicorn
 sqlalchemy 
 psycopg2-binary 
 asyncpg 
+pydantic-settings
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+aiosqlite
+twilio

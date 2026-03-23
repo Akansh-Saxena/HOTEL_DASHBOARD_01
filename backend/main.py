@@ -126,6 +126,12 @@ class NotifyResponse(BaseModel):
     status: str
     methods_triggered: List[str]
 
+class SentimentResponse(BaseModel):
+    hotel_name: str
+    true_sentiment_score: float
+    total_analyzed: int
+    category_breakdown: Dict[str, Any]
+
 # ==========================================
 # AUTHENTICATION UTILITIES
 # ==========================================
@@ -332,8 +338,8 @@ async def search_hotels(request: HotelSearchRequest, current_user: dict = Depend
     # Fallback in case of exhausted quota or Amadeus failing
     if not live_rates:
          live_rates = [
-             HotelRate(hotel_name=f"Backup Resort {request.city_code}", platform="Booking.com", price_usd=250.0, rating=4.8),
-             HotelRate(hotel_name=f"Backup Inn {request.city_code}", platform="Expedia", price_usd=150.0, rating=4.1)
+             HotelRate(hotel_name=f"Fallback Plaza {request.city_code}", platform="Booking.com", price_usd=250.0, rating=4.8),
+             HotelRate(hotel_name=f"Fallback Inn {request.city_code}", platform="Expedia", price_usd=150.0, rating=4.1)
          ]
 
     return HotelSearchResponse(
@@ -341,6 +347,25 @@ async def search_hotels(request: HotelSearchRequest, current_user: dict = Depend
         dates={"check_in": request.check_in, "check_out": request.check_out},
         rates=live_rates
     )
+
+from backend.nlp_pipeline import NLPReviewBrain
+nlp_brain = NLPReviewBrain()
+
+@app.get("/api/analyze-reviews/{hotel_name}", response_model=SentimentResponse)
+async def analyze_hotel_reviews(hotel_name: str, current_user: dict = Depends(get_current_user)):
+    """Fetches Live Google Reviews and processes them via HuggingFace NLP Pipeline."""
+    try:
+        reviews = await live_data_engine.fetch_hotel_reviews(hotel_name)
+        sentiment_data = await nlp_brain.process_reviews(reviews)
+        
+        return SentimentResponse(
+            hotel_name=hotel_name,
+            true_sentiment_score=sentiment_data.get("true_sentiment_score", 0),
+            total_analyzed=sentiment_data.get("total_analyzed", 0),
+            category_breakdown=sentiment_data.get("category_breakdown", {})
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"NLP Processing Error: {str(e)}")
 
 # ==========================================
 # COMMUNICATION WEBHOOK
