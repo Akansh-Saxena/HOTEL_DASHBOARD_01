@@ -1,0 +1,14 @@
+name: Aether Brain Keep Alive
+
+on:
+  schedule:
+    - cron: '*/14 * * * *'  # Har 14 minute mein chalega
+  workflow_dispatch:        # Isse aap manual bhi run kar sakte hain
+
+jobs:
+  ping_render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Neural Pulse to Render
+        run: |
+          curl -I https://hotel-dashboard-01.onrender.com/health
