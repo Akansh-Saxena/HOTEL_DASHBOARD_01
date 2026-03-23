@@ -18,3 +18,4 @@ python-jose[cryptography]
 python-multipart
 aiosqlite
 twilio
+razorpay

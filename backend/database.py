@@ -12,16 +12,33 @@ AsyncSessionLocal = sessionmaker(
 )
 Base = declarative_base()
 
-from sqlalchemy import Column, Integer, String, Boolean
+from sqlalchemy import Column, Integer, String, Boolean, DateTime
+import datetime
 
 # We will define our Caching Models here later (e.g. HotelCache, ReviewCache)
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True, nullable=False)
+    username = Column(String, unique=True, index=True, nullable=True) # allow null during raw OTP creation
     email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True) # allow null since moving to OTP
     is_active = Column(Boolean, default=True)
+
+class OTPTracker(Base):
+    __tablename__ = "otps"
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, index=True, nullable=False)
+    otp_code = Column(String, nullable=False)
+    valid_until = Column(DateTime, nullable=False)
+
+class Booking(Base):
+    __tablename__ = "bookings"
+    id = Column(Integer, primary_key=True, index=True)
+    user_email = Column(String, index=True, nullable=False)
+    hotel_name = Column(String, nullable=False)
+    amount_inr = Column(Integer, nullable=False) # Razorpay works in smallest currency unit (paise)
+    razorpay_order_id = Column(String, unique=True, index=True, nullable=False)
+    status = Column(String, default="PENDING")
 
 async def get_db():
     async with AsyncSessionLocal() as session:

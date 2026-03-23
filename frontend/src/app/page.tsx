@@ -6,6 +6,16 @@ import { getToken, removeToken, fetchWithAuth } from "@/lib/auth";
 import Webcam from "react-webcam";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
+const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+    });
+};
+
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [hotels, setHotels] = useState<any[]>([]);
@@ -101,25 +111,72 @@ export default function DashboardPage() {
     router.push("/login");
   };
 
-  const handleBookNow = async (hotelName: string) => {
-    setNotifying(hotelName);
+  const handleBookNow = async (hotel: any) => {
+    setNotifying(hotel.hotel_name);
     try {
-      const res = await fetchWithAuth(`${API_URL}/api/notify`, {
+      // 1. Fetch Order ID from backend
+      const res = await fetchWithAuth(`${API_URL}/api/payments/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_email: "admin@aether.com", 
-          phone_number: "+14155238886",
-          booking_id: `BKG-${Math.floor(Math.random() * 10000)}`,
-          message: `Confirmed booking at ${hotelName}!`
+          hotel_name: hotel.hotel_name,
+          amount_inr: Math.round(hotel.price_usd * 83)
         })
       });
-      if (res.ok) {
-        alert(`Booking confirmation sent for ${hotelName}!`);
+      
+      const orderData = await res.json();
+      
+      // 2. Load Razorpay script if not already present
+      const resScript = await loadRazorpayScript();
+      if (!resScript) {
+        alert("Razorpay SDK failed to load. Are you online?");
+        return;
       }
+      
+      // 3. Open Checkout
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_mock_key",
+        amount: orderData.amount_paise,
+        currency: orderData.currency,
+        name: "Aether Global",
+        description: `Booking for ${hotel.hotel_name}`,
+        order_id: orderData.order_id,
+        handler: async function (response: any) {
+             // 4. Verify & Auto-Notify Dual-Channel
+             const verifyRes = await fetchWithAuth(`${API_URL}/api/payments/verify`, {
+                 method: "POST",
+                 headers: { "Content-Type": "application/json" },
+                 body: JSON.stringify({
+                     razorpay_order_id: response.razorpay_order_id,
+                     razorpay_payment_id: response.razorpay_payment_id,
+                     razorpay_signature: response.razorpay_signature,
+                     hotel_name: hotel.hotel_name,
+                     amount_inr: Math.round(hotel.price_usd * 83),
+                     user_phone: "+919027276598" 
+                 })
+             });
+             if (verifyRes.ok) {
+                 alert(`💳 Payment Verified! Check WhatsApp and your Email for confirmations.`);
+             } else {
+                 alert("Payment Verification Failed by Server");
+             }
+        },
+        prefill: {
+            name: "Akansh Saxena",
+            email: "admin@aether.com",
+            contact: "9027276598"
+        },
+        theme: {
+            color: "#10B981"
+        }
+      };
+      
+      const rzp1 = new (window as any).Razorpay(options);
+      rzp1.open();
+
     } catch(e) {
       console.error(e);
-      alert("Failed to send booking notification.");
+      alert("Failed to initialize Razorpay gateway.");
     } finally {
       setNotifying(null);
     }
@@ -254,11 +311,11 @@ export default function DashboardPage() {
                     </button>
                     
                     <button 
-                      onClick={() => handleBookNow(hotel.hotel_name)}
+                      onClick={() => handleBookNow(hotel)}
                       disabled={notifying === hotel.hotel_name}
                       className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg text-white text-sm font-semibold transition-all shadow-lg hover:shadow-blue-500/25"
                     >
-                      {notifying === hotel.hotel_name ? "Processing..." : "Secure Booking"}
+                      {notifying === hotel.hotel_name ? "Processing Gateway..." : "Secure Checkout"}
                     </button>
                   </div>
                 </div>

@@ -50,7 +50,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from backend.database import init_db, get_db, User
+from backend.database import init_db, get_db, User, OTPTracker, Booking
 
 from contextlib import asynccontextmanager
 
@@ -84,8 +84,14 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=8, description="Strong password")
 
 class UserResponse(BaseModel):
-    username: str
     email: EmailStr
+
+class SendOTPRequest(BaseModel):
+    email: EmailStr
+
+class VerifyOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6)
 
 class Token(BaseModel):
     access_token: str
@@ -132,6 +138,25 @@ class SentimentResponse(BaseModel):
     total_analyzed: int
     category_breakdown: Dict[str, Any]
 
+class PaymentCreateRequest(BaseModel):
+    hotel_name: str
+    amount_inr: int
+
+class PaymentVerifyRequest(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+    hotel_name: str
+    amount_inr: int
+    user_phone: str # For WhatsApp
+
+import razorpay
+# For testing - replace with prod keys locally
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "rzp_test_mock_key")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "rzp_test_mock_secret")
+
+razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+
 # ==========================================
 # AUTHENTICATION UTILITIES
 # ==========================================
@@ -174,47 +199,64 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     return {"username": user.email, "email": user.email}
 
 # ==========================================
-# AUTHENTICATION ROUTES
+# AUTHENTICATION ROUTES (OTP PHASE)
 # ==========================================
-@app.post("/api/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Register a new user (SQL ORM integration)"""
-    result = await db.execute(select(User).where(User.email == user.email))
-    existing_user = result.scalars().first()
-    
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
-    hashed_password = get_password_hash(user.password)
-    
-    # Store in DB
-    new_user = User(
-        username=user.username,
-        email=user.email,
-        hashed_password=hashed_password
-    )
-    db.add(new_user)
-    await db.commit()
-    await db.refresh(new_user)
-    
-    return UserResponse(username=user.username, email=user.email)
+import random
 
-@app.post("/api/auth/login", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    """Secure JWT user login via SQL Model"""
-    result = await db.execute(select(User).where(User.email == form_data.username))
+@app.post("/api/auth/send-otp", status_code=status.HTTP_200_OK)
+async def send_otp(request: SendOTPRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
+    """Generates a 6-digit OTP, stores it with 5-min expiry, and fires an email."""
+    # Ensure User Profile exists, otherwise implicitly create
+    result = await db.execute(select(User).where(User.email == request.email))
     user = result.scalars().first()
     
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    if not user:
+        new_user = User(email=request.email)
+        db.add(new_user)
+        await db.commit()
+    
+    # Generate 6 digit numeric code
+    otp_code = str(random.randint(100000, 999999))
+    expiration = datetime.utcnow() + timedelta(minutes=5)
+    
+    # Store OTP Tracker
+    new_otp = OTPTracker(email=request.email, otp_code=otp_code, valid_until=expiration)
+    db.add(new_otp)
+    await db.commit()
+    
+    # Send Email Asynchronously
+    background_tasks.add_task(
+        trigger_smtp_email, 
+        request.email, 
+        f"Your Secure Aether Access Code is: {otp_code}\n\nThis code will expire in 5 minutes."
+    )
+    
+    return {"message": "OTP Sent securely to email."}
+
+@app.post("/api/auth/verify-otp", response_model=Token)
+async def verify_otp(request: VerifyOTPRequest, db: AsyncSession = Depends(get_db)):
+    """Verifies the 6-digit OTP against SQLite inside the 5-minute window."""
+    result = await db.execute(select(OTPTracker)
+                              .where(OTPTracker.email == request.email)
+                              .where(OTPTracker.otp_code == request.otp))
+    otps = result.scalars().all()
+    
+    if not otps:
+        raise HTTPException(status_code=401, detail="Invalid Security Code")
         
+    valid_otp = None
+    for token in otps:
+        if token.valid_until > datetime.utcnow():
+             valid_otp = token
+             break
+             
+    if not valid_otp:
+         raise HTTPException(status_code=401, detail="Security Code Expired")
+         
+    # Generate the standard JWT
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.email}, expires_delta=access_token_expires
+        data={"sub": request.email}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -311,27 +353,16 @@ async def search_hotels(request: HotelSearchRequest, current_user: dict = Depend
     live_rates = []
     
     try:
-        amadeus_data = await live_data_engine.fetch_hotel_prices(request.city_code, request.check_in, request.check_out)
+        live_data = await live_data_engine.fetch_hotel_prices(request.city_code, request.check_in, request.check_out)
         
-        if amadeus_data and 'data' in amadeus_data:
-            for idx, item in enumerate(amadeus_data['data']):
-                 hotel_name = item.get('hotel', {}).get('name', f"Live Hotel {idx}")
-                 
-                 price = 0.0
-                 offers = item.get('offers', [])
-                 if offers and len(offers) > 0:
-                      price_str = offers[0].get('price', {}).get('total', '0')
-                      price = float(price_str)
-                 
-                 live_rates.append(HotelRate(
-                     hotel_name=hotel_name,
-                     platform="Amadeus Global",
-                     price_usd=price,
-                     rating=round(4.0 + (idx * 0.1) % 1.0, 1) # Baseline rating mappings
-                 ))
-                 
-                 if len(live_rates) >= 8:
-                     break
+        if live_data and "unified_rates" in live_data:
+            for rate in live_data["unified_rates"]:
+                live_rates.append(HotelRate(
+                    hotel_name=rate["hotel_name"],
+                    platform=rate["platform"],
+                    price_usd=rate["price_usd"],
+                    rating=rate["rating"]
+                ))
     except Exception as e:
         print(f"Amadeus Bridge Error: {e}")
 
@@ -341,13 +372,15 @@ async def search_hotels(request: HotelSearchRequest, current_user: dict = Depend
              HotelRate(hotel_name=f"Fallback Plaza {request.city_code}", platform="Booking.com", price_usd=250.0, rating=4.8),
              HotelRate(hotel_name=f"Fallback Inn {request.city_code}", platform="Expedia", price_usd=150.0, rating=4.1)
          ]
+         
+    # Sort the unified returns by precise cost to organically force the "cheapest deals" to the top
+    live_rates.sort(key=lambda x: x.price_usd)
 
     return HotelSearchResponse(
         city_code=request.city_code.upper(),
         dates={"check_in": request.check_in, "check_out": request.check_out},
         rates=live_rates
     )
-
 from backend.nlp_pipeline import NLPReviewBrain
 nlp_brain = NLPReviewBrain()
 
@@ -368,7 +401,7 @@ async def analyze_hotel_reviews(hotel_name: str, current_user: dict = Depends(ge
         raise HTTPException(status_code=500, detail=f"NLP Processing Error: {str(e)}")
 
 # ==========================================
-# COMMUNICATION WEBHOOK
+# PAYMENT & OMNI-CHANNEL COMMUNICATION WEBHOOK
 # ==========================================
 def trigger_twilio_whatsapp(phone_number: str, message: str):
     """Trigger WhatsApp notification via Twilio."""
@@ -394,7 +427,7 @@ def trigger_twilio_whatsapp(phone_number: str, message: str):
     except Exception as e:
         print(f"Twilio processing error: {e}")
 
-def trigger_smtp_email(email: str, message: str):
+def trigger_smtp_email(email: str, message: str, html_content: str = None):
     """Trigger Standard SMTP Email notification."""
     smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
     smtp_port = int(os.getenv('SMTP_PORT', 587))
@@ -404,10 +437,15 @@ def trigger_smtp_email(email: str, message: str):
     try:
         if smtp_user != 'mock@example.com':
             msg = EmailMessage()
-            msg.set_content(message)
             msg['Subject'] = "Your Akansh Saxena Global Ecosystem Booking"
             msg['From'] = smtp_user
             msg['To'] = email
+            
+            if html_content:
+                msg.set_content("Please enable HTML viewing.")
+                msg.add_alternative(html_content, subtype='html')
+            else:
+                msg.set_content(message)
 
             with smtplib.SMTP(smtp_server, smtp_port) as server:
                 server.starttls()
@@ -419,21 +457,84 @@ def trigger_smtp_email(email: str, message: str):
     except Exception as e:
         print(f"SMTP processing error: {e}")
 
-@app.post("/api/notify", response_model=NotifyResponse)
-async def notify_booking(
-    request: NotifyRequest, 
-    background_tasks: BackgroundTasks, 
-    current_user: dict = Depends(get_current_user)
-):
-    """Placeholder route to trigger Twilio & SMTP asynchronously."""
-    # Run synchronously in the background task queue
-    background_tasks.add_task(trigger_twilio_whatsapp, request.phone_number, request.message)
-    background_tasks.add_task(trigger_smtp_email, request.user_email, request.message)
+@app.post("/api/payments/create-order")
+async def create_razorpay_order(request: PaymentCreateRequest, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Initializes a Razorpay numeric order directly mapped to the dynamically-fetched hotel."""
+    amount_paise = request.amount_inr * 100
+    try:
+        if "mock_key" in RAZORPAY_KEY_ID:
+            # Mock mode bypasses creating actual Razorpay Object
+            order_id = f"order_mock_{random.randint(10000, 99999)}"
+        else:
+            order_data = {"amount": amount_paise, "currency": "INR", "payment_capture": "1"}
+            order = razorpay_client.order.create(data=order_data)
+            order_id = order['id']
+            
+        # Store Pending Booking
+        new_booking = Booking(
+            user_email=current_user["sub"],
+            hotel_name=request.hotel_name,
+            amount_inr=request.amount_inr,
+            razorpay_order_id=order_id,
+            status="PENDING"
+        )
+        db.add(new_booking)
+        await db.commit()
+        return {"order_id": order_id, "amount_paise": amount_paise, "currency": "INR"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Order Creation Failed: {e}")
+
+@app.post("/api/payments/verify", response_model=NotifyResponse)
+async def verify_payment_and_notify(request: PaymentVerifyRequest, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Verifies the SHA256 signature payload. Mutates SQLite to PAID. Triggers WhatsApp & Email."""
     
-    return NotifyResponse(
-        status="Notification triggered successfully",
-        methods_triggered=["WhatsApp", "Email"]
-    )
+    # 1. Verify Payment
+    try:
+        if "mock_key" not in RAZORPAY_KEY_ID:
+            razorpay_client.utility.verify_payment_signature({
+                'razorpay_order_id': request.razorpay_order_id,
+                'razorpay_payment_id': request.razorpay_payment_id,
+                'razorpay_signature': request.razorpay_signature
+            })
+    except razorpay.errors.SignatureVerificationError:
+         raise HTTPException(status_code=400, detail="Razorpay Signature Verification Failed")
+         
+    # 2. Update DB
+    result = await db.execute(select(Booking).where(Booking.razorpay_order_id == request.razorpay_order_id))
+    booking = result.scalars().first()
+    if booking:
+        booking.status = "PAID"
+        await db.commit()
+        
+    # 3. Dual-Channel Notifications (Module 4)
+    email_target = current_user["sub"]
+    
+    # WhatsApp (Twilio)
+    wa_message = f"🏨 *AETHER CONFIRMATION*\n\nYour stay at {request.hotel_name} is confirmed.\n*Total Paid*: ₹{request.amount_inr}\n*Booking ID*: {request.razorpay_order_id}\n\nSafe Travels!"
+    background_tasks.add_task(trigger_twilio_whatsapp, request.user_phone, wa_message)
+            
+    # Email Receipt (SMTP)
+    html_receipt = f\"\"\"
+    <html>
+        <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px;">
+            <div style="max-w: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px;">
+                <h1 style="color: #10B981;">Payment Verified</h1>
+                <p>Hello! Your booking has been successfully processed securely.</p>
+                <h3>Booking Details</h3>
+                <ul>
+                    <li><strong>Hotel:</strong> {request.hotel_name}</li>
+                    <li><strong>Amount:</strong> ₹{request.amount_inr}</li>
+                    <li><strong>Booking ID:</strong> {request.razorpay_order_id}</li>
+                </ul>
+                <hr>
+                <p style="color: #777;">Akansh Saxena - Global Core</p>
+            </div>
+        </body>
+    </html>
+    \"\"\"
+    background_tasks.add_task(trigger_smtp_email, email_target, f"Your Aether Receipt: {request.hotel_name}", html_content=html_receipt)
+    
+    return NotifyResponse(status="success", methods_triggered=["whatsapp", "email_receipt", "db_update"])
 
 @app.get("/health")
 async def health_check():
