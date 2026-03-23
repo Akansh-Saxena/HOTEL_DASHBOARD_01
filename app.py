@@ -179,4 +179,27 @@ elif st.session_state["active_tab"] == "Assistant":
             st.markdown(msg["content"])
             
     # Chat Input
-    user_input = st.
+    user_input = st.chat_input("Ask about refunds, check-in times, or say 'Human'...")
+    if user_input:
+        # Add user message to state
+        st.session_state.chat_history.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+        
+        # Lightweight Intent Matching
+        reply = "I'm the Aether Automated Concierge. I can help you with refunds, check-in times, payment issues, or contacting a human agent."
+        inp = user_input.lower()
+        
+        if "refund" in inp or "cancel" in inp: 
+            reply = "Our refund policy allows full returns up to 48 hours before check-in. Funds return to your source account in 3-5 business days."
+        elif "check in" in inp or "time" in inp: 
+            reply = "Standard check-in is at 2:00 PM, and check-out is at 11:00 AM local time."
+        elif "pay" in inp or "razorpay" in inp:
+            reply = "We accept all major credit cards, UPI, and Net Banking securely via Razorpay. If your payment failed, no funds will be deducted."
+        elif "human" in inp or "agent" in inp: 
+            reply = "Connecting you to Akansh Saxena's support team. Please hold, a representative will text your registered WhatsApp number shortly."
+            
+        # Add assistant reply to state
+        st.session_state.chat_history.append({"role": "assistant", "content": reply})
+        with st.chat_message("assistant"):
+            st.markdown(reply)
