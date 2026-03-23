@@ -1,8 +1,24 @@
-FROM python:3.11-slim 
-WORKDIR /app 
-RUN apt-get update && apt-get install -y libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/* 
-COPY requirements.txt . 
-RUN pip install --no-cache-dir -r requirements.txt 
-COPY . . 
-EXPOSE 8501 
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"] 
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY frontend/package.json frontend/package-lock.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy all frontend files
+COPY frontend/ .
+
+# Build Next.js application
+# We need to set the NEXT_PUBLIC_API_URL so the client browser knows where to request the API.
+# Since it runs locally on the user machine, it's localhost:8000
+ENV NEXT_PUBLIC_API_URL=http://localhost:8000
+
+RUN npm run build
+
+EXPOSE 3000
+
+# Start Next.js on port 3000
+CMD ["npm", "start"]

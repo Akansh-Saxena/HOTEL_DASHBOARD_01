@@ -1,13 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getToken, removeToken, fetchWithAuth } from "@/lib/auth";
+import Webcam from "react-webcam";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [hotels, setHotels] = useState<any[]>([]);
+  const [analytics, setAnalytics] = useState<{revenue: any[], occupancy: any[]}>({revenue: [], occupancy: []});
   const router = useRouter();
+  
+  // Multimodal state
+  const webcamRef = useRef<Webcam>(null);
+  const [emotion, setEmotion] = useState("Scanning...");
+  const [gesture, setGesture] = useState("Scanning...");
+  const [analyzing, setAnalyzing] = useState(false);
+
+  // Notification state
+  const [notifying, setNotifying] = useState<string | null>(null);
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   useEffect(() => {
     const token = getToken();
@@ -16,42 +30,98 @@ export default function DashboardPage() {
       return;
     }
 
-    // Example of calling a protected endpoint
-    const fetchHotels = async () => {
+    const fetchData = async () => {
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-        const res = await fetchWithAuth(`${API_URL}/api/search-hotels`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            city_code: "NYC",
-            check_in: "2026-05-01",
-            check_out: "2026-05-05",
+        const [hotelsRes, analyticsRes] = await Promise.all([
+          fetchWithAuth(`${API_URL}/api/search-hotels`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ city_code: "NYC", check_in: "2026-05-01", check_out: "2026-05-05" }),
           }),
-        });
+          fetchWithAuth(`${API_URL}/api/analytics/dashboard`)
+        ]);
 
-        if (res.ok) {
-          const data = await res.json();
+        if (hotelsRes.ok) {
+          const data = await hotelsRes.json();
           setHotels(data.rates || []);
         } else {
-          // If auth failed, fetchWithAuth redirects to /login automatically
           setHotels([]);
         }
+
+        if (analyticsRes.ok) {
+          const aData = await analyticsRes.json();
+          setAnalytics(aData);
+        }
       } catch (err) {
-        console.error("Failed to fetch hotels", err);
+        console.error("Failed to fetch dashboard data", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchHotels();
-  }, [router]);
+    fetchData();
+  }, [router, API_URL]);
+
+  const captureAndAnalyze = useCallback(async () => {
+    if (!webcamRef.current) return;
+    const imageSrc = webcamRef.current.getScreenshot();
+    if (!imageSrc) return;
+
+    setAnalyzing(true);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/analyze-multimodal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frame_data: imageSrc })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setEmotion(`Emotion: ${data.emotion} (${data.emotion_confidence}%)`);
+        setGesture(`Gesture: ${data.gesture} (${data.gesture_confidence}%)`);
+      }
+    } catch (e) {
+      console.error(e);
+      setEmotion("Failed to analyze");
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [API_URL]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      captureAndAnalyze();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [captureAndAnalyze]);
 
   const handleLogout = () => {
     removeToken();
     router.push("/login");
+  };
+
+  const handleBookNow = async (hotelName: string) => {
+    setNotifying(hotelName);
+    try {
+      const res = await fetchWithAuth(`${API_URL}/api/notify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_email: "admin@aether.com", 
+          phone_number: "+14155238886",
+          booking_id: `BKG-${Math.floor(Math.random() * 10000)}`,
+          message: `Confirmed booking at ${hotelName}!`
+        })
+      });
+      if (res.ok) {
+        alert(`Booking confirmation sent for ${hotelName}!`);
+      }
+    } catch(e) {
+      console.error(e);
+      alert("Failed to send booking notification.");
+    } finally {
+      setNotifying(null);
+    }
   };
 
   if (loading) {
@@ -63,47 +133,123 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
-      <div className="max-w-6xl mx-auto">
-        <header className="flex justify-between items-center mb-12 border-b border-gray-800 pb-6">
-          <h1 className="text-3xl font-bold">
+    <div className="min-h-screen bg-gray-900 text-white p-8 font-sans">
+      <div className="max-w-7xl mx-auto">
+        <header className="flex justify-between items-center mb-8 border-b border-gray-800 pb-6">
+          <h1 className="text-3xl font-bold tracking-tight">
             Aether <span className="text-blue-500">Dashboard</span>
           </h1>
           <button 
             onClick={handleLogout}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors text-sm font-medium"
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors text-sm font-medium shadow-lg"
           >
             Logout
           </button>
         </header>
 
-        <section>
-          <h2 className="text-xl font-semibold mb-6 text-gray-300">Live Hotel Rates (NYC)</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {hotels.map((hotel, idx) => (
-              <div key={idx} className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-gray-500 transition-colors">
-                <div className="flex justify-between items-start mb-4">
-                  <h3 className="font-medium text-lg text-blue-400">{hotel.hotel_name}</h3>
-                  <span className="bg-gray-900 px-2 py-1 rounded text-xs text-yellow-500 font-bold border border-gray-700">
-                    ★ {hotel.rating}
-                  </span>
-                </div>
-                <div className="mt-4">
-                  <p className="text-sm text-gray-400 mb-1">Platform: {hotel.platform}</p>
-                  <p className="text-2xl font-bold">${hotel.price_usd}</p>
-                </div>
-                <button className="mt-6 w-full py-2 bg-blue-600 hover:bg-blue-700 rounded-md text-sm font-semibold transition-colors">
-                  Book Now
-                </button>
-              </div>
-            ))}
+        {/* Analytics Section */}
+        <section className="mb-12 grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+             <h3 className="text-gray-400 text-sm font-semibold uppercase tracking-widest mb-4">Total Revenue by City ($)</h3>
+             <div className="h-64 w-full">
+               <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={analytics.revenue}>
+                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                   <XAxis dataKey="name" stroke="#9CA3AF" />
+                   <YAxis stroke="#9CA3AF" tickFormatter={(value) => `$${value/1000}k`} />
+                   <Tooltip cursor={{fill: '#1F2937'}} contentStyle={{ backgroundColor: '#111827', borderColor: '#374151' }} />
+                   <Legend />
+                   <Bar dataKey="revenue" fill="#3B82F6" radius={[4, 4, 0, 0]} name="Revenue" />
+                 </BarChart>
+               </ResponsiveContainer>
+             </div>
           </div>
-          {hotels.length === 0 && (
-            <div className="text-gray-500 py-12 text-center border border-dashed border-gray-700 rounded-xl">
-              No hotels available or Failed to load.
-            </div>
-          )}
+          <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-xl">
+             <h3 className="text-gray-400 text-sm font-semibold uppercase tracking-widest mb-4">Occupancy Rates by City (%)</h3>
+             <div className="h-64 w-full">
+               <ResponsiveContainer width="100%" height="100%">
+                 <BarChart data={analytics.occupancy} layout="vertical">
+                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                   <XAxis type="number" stroke="#9CA3AF" domain={[0, 100]} />
+                   <YAxis dataKey="name" type="category" stroke="#9CA3AF" width={80} />
+                   <Tooltip cursor={{fill: '#1F2937'}} contentStyle={{ backgroundColor: '#111827', borderColor: '#374151' }} />
+                   <Legend />
+                   <Bar dataKey="rate" fill="#10B981" radius={[0, 4, 4, 0]} name="Occupancy %" />
+                 </BarChart>
+               </ResponsiveContainer>
+             </div>
+          </div>
         </section>
+
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Main Hotel List Area */}
+          <section className="flex-1">
+            <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              Live Rates (NYC)
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {hotels.map((hotel, idx) => (
+                <div key={idx} className="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-gray-500 transition-all shadow-md group">
+                  <div className="flex justify-between items-start mb-4">
+                    <h3 className="font-medium text-lg text-blue-400 group-hover:text-blue-300 transition">{hotel.hotel_name}</h3>
+                    <span className="bg-gray-900 px-2 py-1 rounded-full text-xs text-yellow-500 font-bold border border-gray-700 flex items-center gap-1">
+                      ★ {hotel.rating}
+                    </span>
+                  </div>
+                  <div className="mt-4">
+                    <p className="text-sm text-gray-400 mb-1 font-medium tracking-wide uppercase">Platform: {hotel.platform}</p>
+                    <p className="text-3xl font-extrabold text-white">${hotel.price_usd}</p>
+                  </div>
+                  <button 
+                    onClick={() => handleBookNow(hotel.hotel_name)}
+                    disabled={notifying === hotel.hotel_name}
+                    className="mt-6 w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded-lg text-sm font-semibold transition-all shadow-lg hover:shadow-blue-500/25"
+                  >
+                    {notifying === hotel.hotel_name ? "Processing..." : "Secure Booking"}
+                  </button>
+                </div>
+              ))}
+            </div>
+            {hotels.length === 0 && (
+               <div className="w-full h-48 flex items-center justify-center border-2 border-dashed border-gray-700 rounded-xl text-gray-500 mt-6">
+                 No inventory located or failed to authenticate.
+               </div>
+            )}
+          </section>
+
+          {/* Multimodal Sidebar */}
+          <aside className="w-full lg:w-96 flex flex-col gap-6">
+            <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden shadow-2xl relative">
+              <div className="p-4 border-b border-gray-700 bg-gray-800/80 backdrop-blur top-0 z-10 flex justify-between items-center">
+                <h3 className="text-sm font-bold tracking-widest text-gray-300 uppercase">A.I. Analysis</h3>
+                <span className={`w-2 h-2 rounded-full ${analyzing ? "bg-amber-400 animate-ping" : "bg-emerald-500"}`}></span>
+              </div>
+              <div className="aspect-video bg-black relative">
+                 <Webcam 
+                    audio={false}
+                    ref={webcamRef}
+                    screenshotFormat="image/jpeg"
+                    className="w-full h-full object-cover"
+                    videoConstraints={{ facingMode: "user" }}
+                 />
+                 {/* Reticle Overlay */}
+                 <div className="absolute inset-0 border-4 border-blue-500/20 pointer-events-none rounded-sm"></div>
+              </div>
+              
+              <div className="p-5 flex flex-col gap-3">
+                 <div className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-800">
+                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Emotion</span>
+                   <span className="text-sm font-bold text-blue-400">{emotion}</span>
+                 </div>
+                 <div className="flex justify-between items-center bg-gray-900 p-3 rounded-lg border border-gray-800">
+                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Gesture</span>
+                   <span className="text-sm font-bold text-amber-400">{gesture}</span>
+                 </div>
+              </div>
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
   );

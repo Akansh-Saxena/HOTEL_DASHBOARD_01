@@ -192,6 +192,22 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 # ==========================================
 # MULTIMODAL ENDPOINT
 # ==========================================
+from backend.analytics import get_revenue_by_city, get_occupancy_by_city
+
+@app.get("/api/analytics/dashboard")
+async def get_dashboard_analytics(current_user: dict = Depends(get_current_user)):
+    """Returns aggregated pandas data parsed from the 13MB CSVs for the frontend Recharts dashboard."""
+    try:
+        revenue_data = get_revenue_by_city()
+        occupancy_data = get_occupancy_by_city()
+        
+        return {
+            "revenue": revenue_data,
+            "occupancy": occupancy_data
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics processing failed: {str(e)}")
+
 @app.post("/api/analyze-multimodal", response_model=MultimodalResponse)
 async def analyze_multimodal(request: MultimodalRequest, current_user: dict = Depends(get_current_user)):
     """Accepts base64 image/video frames. Uses DeepFace and MediaPipe for analysis returning >90% confidences."""
