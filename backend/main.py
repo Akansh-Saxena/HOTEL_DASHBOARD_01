@@ -48,10 +48,23 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from backend.database import init_db, get_db, User
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize the Database Tables (SQLite locally, Postgres remotely)
+    await init_db()
+    yield
+
 app = FastAPI(
     title="Akansh Saxena Global Ecosystem - Core Engine",
     description="FastAPI Backend for Hospitality Booking Platform",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -61,12 +74,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# ==========================================
-# MOCK DATABASE (Preparing for PostgreSQL)
-# ==========================================
-# In-memory dictionary mapped to represent future PostgreSQL tables
-fake_users_db: Dict[str, Dict[str, Any]] = {}
 
 # ==========================================
 # PYDANTIC MODELS
@@ -138,7 +145,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> dict:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -151,41 +158,57 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    user = fake_users_db.get(username)
+        
+    # Query database
+    result = await db.execute(select(User).where(User.email == username))
+    user = result.scalars().first()
+    
     if user is None:
         raise credentials_exception
-    return user
+    return {"username": user.email, "email": user.email}
 
 # ==========================================
 # AUTHENTICATION ROUTES
 # ==========================================
 @app.post("/api/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def register_user(user: UserCreate):
-    """Register a new user (preparing for PostgreSQL integration)"""
-    if user.username in fake_users_db:
-        raise HTTPException(status_code=400, detail="Username already registered")
+async def register_user(user: UserCreate, db: AsyncSession = Depends(get_db)):
+    """Register a new user (SQL ORM integration)"""
+    result = await db.execute(select(User).where(User.email == user.email))
+    existing_user = result.scalars().first()
+    
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
     
     hashed_password = get_password_hash(user.password)
-    fake_users_db[user.username] = {
-        "username": user.username,
-        "email": user.email,
-        "hashed_password": hashed_password
-    }
+    
+    # Store in DB
+    new_user = User(
+        username=user.username,
+        email=user.email,
+        hashed_password=hashed_password
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    
     return UserResponse(username=user.username, email=user.email)
 
 @app.post("/api/auth/login", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    """Secure JWT user login"""
-    user = fake_users_db.get(form_data.username)
-    if not user or not verify_password(form_data.password, user["hashed_password"]):
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    """Secure JWT user login via SQL Model"""
+    result = await db.execute(select(User).where(User.email == form_data.username))
+    user = result.scalars().first()
+    
+    if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+        
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user["username"]}, expires_delta=access_token_expires
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
