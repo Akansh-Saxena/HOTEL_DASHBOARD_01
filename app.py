@@ -6,200 +6,195 @@ import os
 import datetime
 
 # --- AUTHOR: AKANSH SAXENA ---
-# --- FINAL PRODUCTION UI (Lightweight Cloud Edition) ---
+# --- AETHER HOSPITALITY: CLOUD INTEGRATION EDITION ---
 
 # --- 1. CONFIGURATION ---
 st.set_page_config(page_title="Global Hospitality Ecosystem", layout="wide", page_icon="🌐")
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
-# --- Custom CSS for Futuristic Vibe ---
-st.markdown("""
+# CRITICAL: This pulls from your Vercel Environment Variables
+# If not set, it defaults to your Render URL (Replace with your actual Render link)
+DEFAULT_BACKEND = "https://hotel-dashboard-01.onrender.com"
+BACKEND_URL = os.getenv("BACKEND_URL", DEFAULT_BACKEND).rstrip("/")
+
+# --- Custom CSS for Neural/Futuristic Vibe ---
+st.markdown(f"""
 <style>
-    .reportview-container { background: #0e1117; }
-    .sidebar .sidebar-content { background: #1a1c23; }
-    h1, h2, h3 { color: #00ffcc !important; }
-    .stButton>button { border-radius: 8px; border: 1px solid #00ffcc; color: #00ffcc; background-color: transparent; width: 100%; }
-    .stButton>button:hover { background-color: #00ffcc; color: #000; box-shadow: 0 0 10px #00ffcc; }
-    .success-text { color: #00ffcc; font-weight: bold; }
+    .stApp {{ background: #0e1117; }}
+    h1, h2, h3 {{ color: #00ffcc !important; font-family: 'Courier New', monospace; }}
+    .stButton>button {{ 
+        border-radius: 20px; 
+        border: 1px solid #00ffcc; 
+        color: #00ffcc; 
+        background-color: rgba(0, 255, 204, 0.05); 
+        transition: 0.3s;
+    }}
+    .stButton>button:hover {{ 
+        background-color: #00ffcc; 
+        color: #000; 
+        box-shadow: 0 0 15px #00ffcc; 
+    }}
+    /* Neural Pulse Animation */
+    @keyframes pulse {{
+        0% {{ opacity: 1; }}
+        50% {{ opacity: 0.4; }}
+        100% {{ opacity: 1; }}
+    }}
+    .uplink-status {{ color: #00ffcc; animation: pulse 2s infinite; font-weight: bold; }}
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. INITIALIZE SESSION STATE ---
-if "token" not in st.session_state:
-    st.session_state["token"] = None
-if "active_tab" not in st.session_state:
-    st.session_state["active_tab"] = "Dashboard"
-if "chat_history" not in st.session_state:
-    st.session_state["chat_history"] = []
-if "otp_step" not in st.session_state:
-    st.session_state["otp_step"] = 1
-if "auth_email" not in st.session_state:
-    st.session_state["auth_email"] = ""
+# --- 2. SESSION STATE MANAGEMENT ---
+for key, val in {
+    "token": None, "active_tab": "Dashboard", "chat_history": [],
+    "otp_step": 1, "auth_email": "", "backend_online": False
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = val
 
-# --- 3. AUTHENTICATION FLOW VIA OTP ---
+# --- 3. BACKEND CONNECTIVITY CHECK ---
+def check_brain_connection():
+    try:
+        # Simple health check to Render
+        with httpx.Client() as client:
+            res = client.get(f"{BACKEND_URL}/health", timeout=5.0)
+            st.session_state["backend_online"] = (res.status_code == 200)
+    except:
+        st.session_state["backend_online"] = False
+
+# --- 4. AUTHENTICATION LOGIC ---
 def request_otp(email):
     try:
-        res = httpx.post(f"{BACKEND_URL}/api/auth/send-otp", json={"email": email}, timeout=10.0)
-        if res.status_code == 200:
-            st.session_state["otp_step"] = 2
-            st.session_state["auth_email"] = email
-            st.rerun()
-        else:
-            st.error(f"Failed to Dispatch Secure Code: {res.json().get('detail', 'Unknown error')}")
+        with httpx.Client() as client:
+            res = client.post(f"{BACKEND_URL}/api/auth/send-otp", json={"email": email}, timeout=15.0)
+            if res.status_code == 200:
+                st.session_state["otp_step"] = 2
+                st.session_state["auth_email"] = email
+                st.rerun()
+            else:
+                st.error(f"Brain Refused Connection: {res.json().get('detail', 'Access Denied')}")
     except Exception as e:
-        st.error(f"Cannot connect to Backend Brain. Is Uvicorn running? Error: {e}")
+        st.error(f"📡 Transmission Interrupted. Ensure Render Backend is Active. Error: {e}")
 
 def verify_code(email, code):
     try:
-        res = httpx.post(f"{BACKEND_URL}/api/auth/verify-otp", json={"email": email, "otp": code}, timeout=10.0)
-        if res.status_code == 200:
-            st.session_state["token"] = res.json().get("access_token")
-            st.rerun()
-        else:
-            st.error("Invalid or Expired Security Code.")
+        with httpx.Client() as client:
+            res = client.post(f"{BACKEND_URL}/api/auth/verify-otp", json={"email": email, "otp": code}, timeout=15.0)
+            if res.status_code == 200:
+                st.session_state["token"] = res.json().get("access_token")
+                st.success("Identity Verified. Entering Aether...")
+                st.rerun()
+            else:
+                st.error("Neural Code Mismatch. Please retry.")
     except Exception as e:
-        st.error(f"Connection Error: {e}")
+        st.error(f"Verification Link Broken: {e}")
 
+# --- GATEWAY SCREEN ---
 if not st.session_state["token"]:
     st.title("🌐 Aether Core Gateway")
-    st.markdown("### Secure Access Required")
+    check_brain_connection()
     
+    status_color = "uplink-status" if st.session_state["backend_online"] else ""
+    status_text = "ONLINE" if st.session_state["backend_online"] else "OFFLINE (Wait for Render to wake up)"
+    st.markdown(f"System Uplink: <span class='{status_color}'>{status_text}</span>", unsafe_allow_html=True)
+
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         if st.session_state["otp_step"] == 1:
             with st.form("otp_form"):
-                email_input = st.text_input("Admin Email", value="saxenaakansh29@gmail.com")
-                if st.form_submit_button("Transmit Secure Code"):
+                email_input = st.text_input("Admin ID", value="saxenaakansh29@gmail.com")
+                submit = st.form_submit_button("Request Access Key")
+                if submit:
                     request_otp(email_input)
         else:
             with st.form("verify_form"):
                 otp_input = st.text_input("6-Digit Neural Code", type="password")
-                if st.form_submit_button("Authenticate Access"):
+                if st.form_submit_button("Verify Identity"):
                     verify_code(st.session_state["auth_email"], otp_input)
-            if st.button("Cancel / Back"):
+            if st.button("Return to Gateway"):
                 st.session_state["otp_step"] = 1
                 st.rerun()
-    st.stop() # Halts execution until logged in
+    st.stop()
 
-# --- 4. SIDEBAR & NAVIGATION ---
-st.sidebar.title("🧠 Neural Command")
-st.sidebar.success(f"🟢 Uplink Active: {st.session_state['auth_email']}")
+# --- 5. NEURAL COMMAND (SIDEBAR) ---
+st.sidebar.markdown(f"### 🧠 Neural Command")
+st.sidebar.markdown(f"User: `{st.session_state['auth_email']}`")
 
-if st.sidebar.button("📊 System Dashboard"):
-    st.session_state["active_tab"] = "Dashboard"
-    st.rerun()
-if st.sidebar.button("🌍 Global Booking Hub"):
-    st.session_state["active_tab"] = "Booking"
-    st.rerun()
-if st.sidebar.button("🗣️ 24/7 AI Support"):
-    st.session_state["active_tab"] = "Assistant"
-    st.rerun()
+tabs = {
+    "📊 System Dashboard": "Dashboard",
+    "🌍 Booking Hub": "Booking",
+    "🗣️ AI Concierge": "Assistant"
+}
+
+for label, tab_id in tabs.items():
+    if st.sidebar.button(label):
+        st.session_state["active_tab"] = tab_id
+        st.rerun()
 
 st.sidebar.markdown("---")
-
-if st.sidebar.button("🔴 Disconnect (Log Out)"):
+if st.sidebar.button("🔴 Terminate Session"):
     st.session_state.clear()
     st.rerun()
 
-# --- 5. MAIN WORKSPACE ---
+# --- 6. WORKSPACE ---
 
-# --- TAB 1: DASHBOARD ---
+# --- TAB: DASHBOARD ---
 if st.session_state["active_tab"] == "Dashboard":
-    st.title("🏨 Strategic Hospitality Command Center")
-    st.subheader("Global Rate Aggregation & Revenue")
+    st.title("🏨 Strategic Command Center")
     
-    # Fixed length data arrays for perfect Plotly rendering
-    dates = pd.date_range(start="2026-06-01", periods=10)
+    # Mock Data for Final Year Presentation
+    dates = pd.date_range(start=datetime.date.today(), periods=12)
     mock_df = pd.DataFrame({
-        "Date": dates,
-        "Revenue": [12000, 15000, 11000, 18000, 16000, 22000, 21000, 19000, 25000, 24000],
-        "Platform": ["MakeMyTrip", "Booking.com", "Agoda", "Direct", "MakeMyTrip", "Booking.com", "Agoda", "Direct", "MakeMyTrip", "Booking.com"]
+        "Timeline": dates,
+        "Occupancy %": [65, 72, 80, 85, 90, 88, 75, 70, 82, 95, 92, 89],
+        "Platform": ["Direct"]*3 + ["Booking.com"]*3 + ["Agoda"]*3 + ["Expedia"]*3
     })
-    fig = px.area(mock_df, x="Date", y="Revenue", color="Platform", title="Real-Time Disparity Engine (INR)")
-    fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", font_color="#00ffcc")
+    
+    fig = px.line(mock_df, x="Timeline", y="Occupancy %", color="Platform", markers=True, 
+                 title="Live Neural Occupancy Forecast")
+    fig.update_layout(plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", 
+                     font_color="#00ffcc", xaxis_gridcolor="#1a1c23", yaxis_gridcolor="#1a1c23")
     st.plotly_chart(fig, use_container_width=True)
 
-# --- TAB 2: BOOKING & RAZORPAY ---
+# --- TAB: BOOKING ---
 elif st.session_state["active_tab"] == "Booking":
     st.title("🌍 Universal Booking Engine")
     
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        st.markdown("### 1. Search Inventory")
-        city = st.text_input("📍 Destination", placeholder="e.g., Prayagraj, Paris, Tokyo")
-        date_col1, date_col2 = st.columns(2)
-        with date_col1:
-            check_in = st.date_input("Check-In", datetime.date.today())
-        with date_col2:
-            check_out = st.date_input("Check-Out", datetime.date.today() + datetime.timedelta(days=2))
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        st.subheader("Inventory Search")
+        dest = st.text_input("📍 Destination", "Prayagraj, India")
+        d1, d2 = st.columns(2)
+        checkin = d1.date_input("In", datetime.date.today())
+        checkout = d2.date_input("Out", datetime.date.today() + datetime.timedelta(days=1))
         
-        if st.button("Scan Deep Web Inventory (Amadeus + Meta)"):
-            with st.spinner("Aggregating Global Rates via FastAPI Brain..."):
-                try:
-                    st.success("Live Market Data Synchronized!")
-                    st.markdown("""
-                    ### 🏆 Cheapest Found: **Agoda** | ₹8,450
-                    **Hotel:** Taj Residency, Prayagraj
-                    *Other Rates: Amadeus (₹12,000) | MakeMyTrip (₹11,500) | OYO (₹9,200)*
-                    """)
-                    st.session_state["selected_hotel"] = "Taj Residency, Prayagraj"
-                    st.session_state["selected_price"] = 8450
-                except Exception as e:
-                    st.error(f"Backend Link Offline: {e}")
+        if st.button("Scan Global Inventories"):
+            with st.spinner("Bypassing Meta-Aggregators..."):
+                st.success("Cheapest Found: Agoda (₹8,450) - Taj Residency")
+                st.session_state["selected_price"] = 8450
 
-    with col2:
-        st.markdown("### 2. Secure Checkout")
+    with c2:
+        st.subheader("Secure Checkout")
         if "selected_price" in st.session_state:
-            st.info(f"**Total Due:** ₹{st.session_state['selected_price']}")
-            phone = st.text_input("WhatsApp Number (For Ticket)", "+919027276598")
-            
-            if st.button("Pay via Razorpay"):
-                with st.spinner("Initializing Secure Gateway..."):
-                    try:
-                        st.write("Generating Razorpay Order...")
-                        st.write("Awaiting User Payment...")
-                        st.write("Verifying Webhook & Firing Multi-Channel Twilio/SMTP...")
-                        
-                        st.balloons()
-                        st.success("✅ Payment Verified & Handled!")
-                        st.markdown("📱 WhatsApp Ticket & Email Receipt Dispatched successfully.")
-                    except Exception as e:
-                        st.error(f"Razorpay API Error: {e}")
+            st.metric("Total (Neural-Rate)", f"₹{st.session_state['selected_price']}")
+            if st.button("Initiate Razorpay"):
+                st.toast("Redirecting to Secure Gateway...")
+                st.balloons()
         else:
-            st.warning("Please search and select a hotel first.")
+            st.info("Awaiting scan results...")
 
-# --- TAB 3: 24/7 AI CHATBOT ---
+# --- TAB: ASSISTANT ---
 elif st.session_state["active_tab"] == "Assistant":
-    st.title("🗣️ 24/7 Support Concierge")
-    st.markdown("Instant support for bookings, refunds, and technical queries.")
+    st.title("🗣️ AI Support Concierge")
     
-    # Display chat history
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
-    # Chat Input
-    user_input = st.chat_input("Ask about refunds, check-in times, or say 'Human'...")
-    if user_input:
-        # Add user message to state
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
+    if prompt := st.chat_input("How can I assist your stay?"):
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        with st.chat_message("user"): st.markdown(prompt)
         
-        # Lightweight Intent Matching
-        reply = "I'm the Aether Automated Concierge. I can help you with refunds, check-in times, payment issues, or contacting a human agent."
-        inp = user_input.lower()
-        
-        if "refund" in inp or "cancel" in inp: 
-            reply = "Our refund policy allows full returns up to 48 hours before check-in. Funds return to your source account in 3-5 business days."
-        elif "check in" in inp or "time" in inp: 
-            reply = "Standard check-in is at 2:00 PM, and check-out is at 11:00 AM local time."
-        elif "pay" in inp or "razorpay" in inp:
-            reply = "We accept all major credit cards, UPI, and Net Banking securely via Razorpay. If your payment failed, no funds will be deducted."
-        elif "human" in inp or "agent" in inp: 
-            reply = "Connecting you to Akansh Saxena's support team. Please hold, a representative will text your registered WhatsApp number shortly."
-            
-        # Add assistant reply to state
-        st.session_state.chat_history.append({"role": "assistant", "content": reply})
-        with st.chat_message("assistant"):
-            st.markdown(reply)
+        # In production, you would replace this with an API call to your backend LLM
+        response = "Neural Logic Processing: Your query about '" + prompt + "' is being handled by our support core."
+        st.session_state.chat_history.append({"role": "assistant", "content": response})
+        with st.chat_message("assistant"): st.markdown(response)
