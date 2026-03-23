@@ -25,11 +25,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. INITIALIZE SESSION STATE ---
-if "token" not in st.session_state: st.session_state["token"] = None
-if "active_tab" not in st.session_state: st.session_state["active_tab"] = "Dashboard"
-if "chat_history" not in st.session_state: st.session_state["chat_history"] = []
-if "otp_step" not in st.session_state: st.session_state["otp_step"] = 1
-if "auth_email" not in st.session_state: st.session_state["auth_email"] = ""
+if "token" not in st.session_state:
+    st.session_state["token"] = None
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = "Dashboard"
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
+if "otp_step" not in st.session_state:
+    st.session_state["otp_step"] = 1
+if "auth_email" not in st.session_state:
+    st.session_state["auth_email"] = ""
 
 # --- 3. AUTHENTICATION FLOW VIA OTP ---
 def request_otp(email):
@@ -80,10 +85,18 @@ if not st.session_state["token"]:
 st.sidebar.title("🧠 Neural Command")
 st.sidebar.success(f"🟢 Uplink Active: {st.session_state['auth_email']}")
 
-if st.sidebar.button("📊 System Dashboard"): st.session_state["active_tab"] = "Dashboard"; st.rerun()
-if st.sidebar.button("🌍 Global Booking Hub"): st.session_state["active_tab"] = "Booking"; st.rerun()
-if st.sidebar.button("🗣️ 24/7 AI Support"): st.session_state["active_tab"] = "Assistant"; st.rerun()
+if st.sidebar.button("📊 System Dashboard"):
+    st.session_state["active_tab"] = "Dashboard"
+    st.rerun()
+if st.sidebar.button("🌍 Global Booking Hub"):
+    st.session_state["active_tab"] = "Booking"
+    st.rerun()
+if st.sidebar.button("🗣️ 24/7 AI Support"):
+    st.session_state["active_tab"] = "Assistant"
+    st.rerun()
+
 st.sidebar.markdown("---")
+
 if st.sidebar.button("🔴 Disconnect (Log Out)"):
     st.session_state.clear()
     st.rerun()
@@ -115,8 +128,10 @@ elif st.session_state["active_tab"] == "Booking":
         st.markdown("### 1. Search Inventory")
         city = st.text_input("📍 Destination", placeholder="e.g., Prayagraj, Paris, Tokyo")
         date_col1, date_col2 = st.columns(2)
-        with date_col1: check_in = st.date_input("Check-In", datetime.date.today())
-        with date_col2: check_out = st.date_input("Check-Out", datetime.date.today() + datetime.timedelta(days=2))
+        with date_col1:
+            check_in = st.date_input("Check-In", datetime.date.today())
+        with date_col2:
+            check_out = st.date_input("Check-Out", datetime.date.today() + datetime.timedelta(days=2))
         
         if st.button("Scan Deep Web Inventory (Amadeus + Meta)"):
             with st.spinner("Aggregating Global Rates via FastAPI Brain..."):
@@ -173,7 +188,8 @@ elif st.session_state["active_tab"] == "Assistant":
     if user_input:
         # Add user message to state
         st.session_state.chat_history.append({"role": "user", "content": user_input})
-        with st.chat_message("user"): st.markdown(user_input)
+        with st.chat_message("user"):
+            st.markdown(user_input)
         
         # Lightweight Intent Matching (No heavy ML required, perfect for 512MB RAM)
         reply = "I'm the Aether Automated Concierge. I can help you with refunds, check-in times, payment issues, or contacting a human agent."
@@ -190,4 +206,5 @@ elif st.session_state["active_tab"] == "Assistant":
             
         # Add assistant reply to state
         st.session_state.chat_history.append({"role": "assistant", "content": reply})
-        with st.chat_message("assistant"): st.markdown(reply)
+        with st.chat_message("assistant"):
+            st.markdown(reply)
