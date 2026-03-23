@@ -24,12 +24,9 @@ class User(Base):
     hashed_password = Column(String, nullable=True) # allow null since moving to OTP
     is_active = Column(Boolean, default=True)
 
-class OTPTracker(Base):
-    __tablename__ = "otps"
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, index=True, nullable=False)
-    otp_code = Column(String, nullable=False)
-    valid_until = Column(DateTime, nullable=False)
+    # --- NEW OTP COLUMNS ADDED BY AKANSH SAXENA ---
+    otp = Column(String, nullable=True)
+    otp_expiry = Column(DateTime, nullable=True)
 
 class Booking(Base):
     __tablename__ = "bookings"
