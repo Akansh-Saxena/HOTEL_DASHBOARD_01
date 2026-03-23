@@ -207,4 +207,8 @@ elif st.session_state["active_tab"] == "Assistant":
         # Add assistant reply to state
         st.session_state.chat_history.append({"role": "assistant", "content": reply})
         with st.chat_message("assistant"):
+<<<<<<< HEAD
             st.markdown(reply)
+=======
+            st.markdown(reply)
+>>>>>>> a170497fffe5d772278cd6a6ce5747b65413656d
