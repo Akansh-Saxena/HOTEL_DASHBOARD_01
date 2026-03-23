@@ -22,8 +22,6 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const [notifying, setNotifying] = useState<string | null>(null);
-  const [analyzingSentiment, setAnalyzingSentiment] = useState<string | null>(null);
-  const [sentimentResults, setSentimentResults] = useState<Record<string, any>>({});
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -142,23 +140,6 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeepScan = async (hotelName: string) => {
-    setAnalyzingSentiment(hotelName);
-    try {
-      const res = await fetchWithAuth(`${API_URL}/api/analyze-reviews/${encodeURIComponent(hotelName)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setSentimentResults(prev => ({...prev, [hotelName]: data}));
-      } else {
-        alert("Deep Scan failed. Model might be loading.");
-      }
-    } catch (e) {
-      console.error("Deep Scan Error:", e);
-    } finally {
-      setAnalyzingSentiment(null);
-    }
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
@@ -237,39 +218,7 @@ export default function DashboardPage() {
                     <p className="text-3xl font-extrabold text-white">${hotel.price_usd}</p>
                   </div>
 
-                  {/* Sentiment Results Panel */}
-                  {sentimentResults[hotel.hotel_name] && (
-                    <div className="mt-4 p-3 bg-gray-900 border border-purple-500/30 rounded-lg">
-                      <div className="flex justify-between items-center mb-2">
-                         <span className="text-xs font-bold uppercase tracking-widest text-purple-400">Deep Scan Analysis</span>
-                         <span className="text-sm font-black text-white">{sentimentResults[hotel.hotel_name].true_sentiment_score}/100</span>
-                      </div>
-                      <p className="text-xs text-gray-400 mb-2">Based on {sentimentResults[hotel.hotel_name].total_analyzed} Google Reviews</p>
-                      
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        {Object.entries(sentimentResults[hotel.hotel_name].category_breakdown || {}).map(([cat, scores]: any, i) => {
-                          if (scores.total === 0) return null;
-                          const pct = Math.round((scores.positive / scores.total) * 100);
-                          return (
-                            <div key={i} className="flex justify-between bg-gray-800 p-1.5 rounded border border-gray-700">
-                              <span className="text-gray-300">{cat}</span>
-                              <span className={pct > 70 ? "text-emerald-400 font-bold" : pct > 40 ? "text-amber-400 font-bold" : "text-red-400 font-bold"}>{pct}%</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
                   <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                    <button 
-                      onClick={() => handleDeepScan(hotel.hotel_name)}
-                      disabled={analyzingSentiment === hotel.hotel_name}
-                      className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 border border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-semibold transition-all text-purple-300 hover:text-purple-200"
-                    >
-                      {analyzingSentiment === hotel.hotel_name ? "Scanning Model..." : "NLP Deep Scan"}
-                    </button>
-                    
                     <button 
                       onClick={() => handleBookNow(hotel)}
                       disabled={notifying === hotel.hotel_name}
