@@ -28,17 +28,31 @@ if "active_tab" not in st.session_state:
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
 
-# --- 3. AUTHENTICATION FLOW ---
-def login_user(email, password):
+# --- 3. AUTHENTICATION FLOW VIA OTP ---
+if "otp_step" not in st.session_state:
+    st.session_state["otp_step"] = 1
+
+def request_otp(email):
     try:
-        response = httpx.post(f"{BACKEND_URL}/token", data={"username": email, "password": password})
-        if response.status_code == 200:
-            st.session_state["token"] = response.json().get("access_token")
+        res = httpx.post(f"{BACKEND_URL}/api/auth/send-otp", json={"email": email})
+        if res.status_code == 200:
+            st.session_state["otp_step"] = 2
             st.rerun()
         else:
-            st.error("Authentication Failed: Invalid Credentials.")
+            st.error("Failed to Dispatch Secure Code.")
     except Exception as e:
-        st.error(f"Cannot connect to Backend Brain: {e}. Is the FastAPI server running?")
+        st.error(f"Cannot connect to Backend Brain: {e}")
+
+def verify_code(email, code):
+    try:
+        res = httpx.post(f"{BACKEND_URL}/api/auth/verify-otp", json={"email": email, "otp": code})
+        if res.status_code == 200:
+            st.session_state["token"] = res.json().get("access_token")
+            st.rerun()
+        else:
+            st.error("Invalid Security Code.")
+    except Exception as e:
+        st.error(f"Connection Error: {e}")
 
 if not st.session_state["token"]:
     st.title("🌐 Aether Core Gateway")
@@ -46,12 +60,19 @@ if not st.session_state["token"]:
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        with st.form("login_form"):
-            st.text_input("Admin Email", key="email", value="saxenaakansh29@gmail.com")
-            st.text_input("Master Password", type="password", key="password", value="admin123")
-            submitted = st.form_submit_button("Initialize Uplink")
-            if submitted:
-                login_user(st.session_state.email, st.session_state.password)
+        if st.session_state["otp_step"] == 1:
+            with st.form("otp_form"):
+                st.text_input("Admin Email", key="email", value="admin@aether.com")
+                if st.form_submit_button("Transmit Code"):
+                    request_otp(st.session_state.email)
+        else:
+            with st.form("verify_form"):
+                st.text_input("6-Digit Neural Code", key="otp_code")
+                if st.form_submit_button("Authenticate Access"):
+                    verify_code(st.session_state.email, st.session_state.otp_code)
+            if st.button("Cancel"):
+                st.session_state["otp_step"] = 1
+                st.rerun()
     st.stop() # Halts execution until logged in
 
 # --- 5. SIDEBAR & NAVIGATION ---
@@ -84,31 +105,48 @@ elif st.session_state["active_tab"] == "Booking":
     with col1:
         city = st.text_input("📍 Destination", placeholder="e.g., Prayagraj, NYC, Tokyo")
         if st.button("Search Deep Web Inventory"):
-            with st.spinner("Pinging Global APIs via FastAPI Brain..."):
+            with st.spinner("Pinging Global Meta-Search via FastAPI Brain..."):
                 try:
                     headers = {"Authorization": f"Bearer {st.session_state['token']}"}
-                    req = {"city_code": city if city else "ALL", "check_in": "2026-06-01", "check_out": "2026-06-05"}
+                    req = {"city_code": city if city else "NYC", "check_in": "2026-06-01", "check_out": "2026-06-05"}
                     res = httpx.post(f"{BACKEND_URL}/api/search-hotels", json=req, headers=headers)
-                    results = res.json().get("results", [])
-                    st.success("Data Retrieved.")
+                    results = res.json().get("rates", [])
+                    st.success("Synchronized Multiple Scrapers.")
                     for r in results:
-                        st.markdown(f"**{r['hotel_name']}** | {r['platform']} | ₹{r['price_inr']}")
+                        st.markdown(f"**{r['hotel_name']}** | {r['platform']} | ${r['price_usd']} | ★ {r['rating']}")
                 except Exception as e:
                     st.error(f"Backend Link Offline: {e}")
 
     with col2:
-        st.markdown("### Secure Payment Gateway")
-        st.selectbox("Select Node", ["Razorpay (UPI)", "Stripe (International)"])
+        st.markdown("### Secure Razorpay Sim")
+        st.selectbox("Select Node", ["Razorpay SDK"])
         phone = st.text_input("WhatsApp Number", "+919027276598")
-        if st.button("Authorize Payment & Book"):
+        if st.button("Mock Auto-Verify Payment"):
             try:
                 headers = {"Authorization": f"Bearer {st.session_state['token']}"}
-                notify_req = {"hotel_name": "Selected Hotel", "user_phone": phone}
-                res = httpx.post(f"{BACKEND_URL}/api/notify", json=notify_req, headers=headers)
+                
+                # 1. Create
+                st.write("Initializing Order...")
+                c_req = {"hotel_name": "Aether Sim Hotel", "amount_inr": 4500}
+                res1 = httpx.post(f"{BACKEND_URL}/api/payments/create-order", json=c_req, headers=headers)
+                order_id = res1.json().get("order_id")
+                
+                # 2. Verify
+                st.write("Verifying Webhook & Firing Multi-Channel...")
+                v_req = {
+                    "razorpay_order_id": order_id,
+                    "razorpay_payment_id": "pay_mock",
+                    "razorpay_signature": "sig_mock",
+                    "hotel_name": "Aether Sim Hotel",
+                    "amount_inr": 4500,
+                    "user_phone": phone
+                }
+                res2 = httpx.post(f"{BACKEND_URL}/api/payments/verify", json=v_req, headers=headers)
+                
                 st.balloons()
-                st.markdown(f"<p class='success-text'>✅ {res.json().get('whatsapp_status')}</p>", unsafe_allow_html=True)
+                st.success("✅ Payment Handled and Confirmations Sent!")
             except Exception as e:
-                st.error("API Error")
+                st.error("Razorpay API Error")
 
 elif st.session_state["active_tab"] == "Assistant":
     st.title("🗣️ Neural Voice Assistant")
