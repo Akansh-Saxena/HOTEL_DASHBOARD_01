@@ -1,6 +1,10 @@
-# Aether Global: Advanced Hospitality Aggregator
+# Aether Global: The Next-Gen Hospitality Ecosystem
 
-> **Aether Global: An Advanced Hospitality Aggregator developed by Akansh Saxena from J.K. Institute of Applied Physics & Technology.** This production-ready platform redefines travel tech by integrating real-time hotel inventories, mandating secure Aadhar-based KYC via dynamic OTP verification, and enabling seamless payments through a professional-grade gateway, all optimized to run on low-latency micro-architectures.
+> "I, Akansh Saxena, have developed Aether Global as a high-concurrency metasearch engine. It features a robust Zero-Trust Security layer requiring mandatory Aadhar OTP verification. Built on a stateless FastAPI backend, it manages real-time global hotel inventories and original Razorpay gateways, all optimized to run within a strict 350MB RAM footprint using advanced Gunicorn worker management."
+
+## Project Abstract
+
+Aether Global is an Advanced Hospitality Aggregator developed by Akansh Saxena from J.K. Institute of Applied Physics & Technology. This production-ready platform redefines travel tech by integrating real-time hotel inventories, mandating secure Aadhar-based KYC via dynamic OTP verification, and enabling seamless payments through a professional-grade gateway, all optimized to run on low-latency micro-architectures.
 
 ## Technical Architecture
 
