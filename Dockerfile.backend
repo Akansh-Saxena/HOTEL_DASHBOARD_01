@@ -1,8 +1,22 @@
 FROM python:3.11-slim 
+
 WORKDIR /app 
-RUN apt-get update && apt-get install -y libgl1 libglib2.0-0 && rm -rf /var/lib/apt/lists/* 
-COPY requirements.txt . 
-RUN pip install --no-cache-dir -r requirements.txt 
+
+# System dependencies for OpenCV/Graphics if needed
+RUN apt-get update && apt-get install -y \
+    libgl1 \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/* # CRITICAL FIX: Direct path to backend requirements
+COPY backend/requirements.txt ./requirements.txt
+
+# Install with email support explicitly
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy everything
 COPY . . 
-EXPOSE 8000 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"] 
+
+# Render uses port 10000 by default for web services
+EXPOSE 10000
+
+# Start command using the backend module path
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "10000"]
