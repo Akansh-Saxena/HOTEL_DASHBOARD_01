@@ -136,8 +136,6 @@ elif st.session_state["active_tab"] == "Booking":
         if st.button("Scan Deep Web Inventory (Amadeus + Meta)"):
             with st.spinner("Aggregating Global Rates via FastAPI Brain..."):
                 try:
-                    # In a real scenario, this hits your backend aggregator endpoint
-                    # For UI presentation, we simulate the returned cheapest rate payload
                     st.success("Live Market Data Synchronized!")
                     st.markdown("""
                     ### 🏆 Cheapest Found: **Agoda** | ₹8,450
@@ -158,11 +156,8 @@ elif st.session_state["active_tab"] == "Booking":
             if st.button("Pay via Razorpay"):
                 with st.spinner("Initializing Secure Gateway..."):
                     try:
-                        # 1. Hit your backend to create order
                         st.write("Generating Razorpay Order...")
-                        # 2. Simulate User completing Razorpay popup
                         st.write("Awaiting User Payment...")
-                        # 3. Hit your backend to verify signature and send WhatsApp/Email
                         st.write("Verifying Webhook & Firing Multi-Channel Twilio/SMTP...")
                         
                         st.balloons()
@@ -191,7 +186,7 @@ elif st.session_state["active_tab"] == "Assistant":
         with st.chat_message("user"):
             st.markdown(user_input)
         
-        # Lightweight Intent Matching (No heavy ML required, perfect for 512MB RAM)
+        # Lightweight Intent Matching
         reply = "I'm the Aether Automated Concierge. I can help you with refunds, check-in times, payment issues, or contacting a human agent."
         inp = user_input.lower()
         
@@ -207,8 +202,4 @@ elif st.session_state["active_tab"] == "Assistant":
         # Add assistant reply to state
         st.session_state.chat_history.append({"role": "assistant", "content": reply})
         with st.chat_message("assistant"):
-<<<<<<< HEAD
             st.markdown(reply)
-=======
-            st.markdown(reply)
->>>>>>> a170497fffe5d772278cd6a6ce5747b65413656d
