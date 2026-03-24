@@ -1,32 +1,29 @@
-# Use the official Python image
-FROM python:3.9-slim
+# 1. Use a modern, slim Python version
+FROM python:3.11-slim
 
-# Set working directory
+# 2. Set working directory
 WORKDIR /app
 
-# System dependencies for OpenCV and MediaPipe
+# 3. Install system dependencies for OpenCV/MediaPipe
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# 4. Copy and Install requirements
 COPY requirements.txt .
-
-# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
+# 5. Copy all project files
 COPY . .
 
-# Expose port (Streamlit defaults to 8501, or Render overrides it)
-EXPOSE 8501
-
-# Streamlit-specific config for Cloud execution
-ENV STREAMLIT_SERVER_PORT=8501
-ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+# 6. Streamlit Environment Variables
 ENV STREAMLIT_SERVER_ENABLE_CORS=false
 ENV STREAMLIT_SERVER_HEADLESS=true
 
-# Run the application
-CMD ["streamlit", "run", "app.py"]
+# 7. Expose the main Render Port
+EXPOSE 10000
+
+# 8. THE BRAIN FIX: Start Backend (8000) and Frontend ($PORT) together
+# Backend ko background (&) mein dala hai taaki dono ek saath chalein
+CMD uvicorn main:app --host 0.0.0.0 --port 8000 & streamlit run app.py --server.port $PORT --server.address 0.0.0.0
