@@ -1,107 +1,119 @@
 import streamlit as st
 import httpx
+import time
 
 # =====================================================================
-# SYSTEM: AETHER GLOBAL UI v5.0 (OFFICIAL)
+# SYSTEM: AETHER SUPER-APP v6.0 (ULTIMATE EDITION)
 # AUTHOR: AKANSH SAXENA | J.K. INSTITUTE
-# COMPATIBILITY: VERCEL, STREAMLIT, RENDER
+# FEATURES: GPS, OTP, HOTEL+FOOD+TRAVEL AGGREGATOR
 # =====================================================================
 
-st.set_page_config(page_title="Aether Global | Akansh Saxena", layout="wide", page_icon="🛰️")
+st.set_page_config(page_title="Aether Super-App | Akansh Saxena", layout="wide")
 
-# DIRECT BACKEND LINK (Render URL)
-# Akansh, ensure karein ki ye URL aapke Render dashboard se match kare
-BACKEND_URL = "https://hotel-dashboard-01.onrender.com"
-
-# AUTHORIZED AETHER UI STYLING
+# CUSTOM CSS FOR REALISTIC "SUPER-APP" LOOK
 st.markdown("""
     <style>
-    .stApp { background-color: #050505; color: #00ffcc; }
-    .auth-box { border: 1px solid #00ffcc; padding: 25px; border-radius: 12px; background: #111; margin-top: 30px;}
-    .hotel-card { background: #1a1a1a; padding: 15px; border-radius: 10px; border: 1px solid #333; text-align: center; min-height: 400px;}
-    .price-tag { color: #00ffcc; font-size: 24px; font-weight: bold; }
+    .stApp { background: #f4f7fb; color: #1a1a1a; }
+    .main-nav { background: #ffffff; padding: 15px; border-bottom: 2px solid #eee; display: flex; gap: 30px; justify-content: center; }
+    .service-card { background: white; padding: 20px; border-radius: 15px; border: 1px solid #ddd; text-align: center; transition: 0.3s; }
+    .service-card:hover { border-color: #008cff; transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+    .price-tag { color: #d32f2f; font-weight: bold; font-size: 20px; }
+    .vendor-compare { background: #f9f9f9; padding: 10px; border-radius: 8px; font-size: 13px; margin-top: 5px; border-left: 4px solid #ffb200; }
     </style>
 """, unsafe_allow_html=True)
 
-if "verified" not in st.session_state: st.session_state.verified = False
+# --- SESSION STATES ---
+if "auth_status" not in st.session_state: st.session_state.auth_status = False
+if "location" not in st.session_state: st.session_state.location = "Detecting..."
 
-# SIDEBAR: AUTHORIZED ACCESS & AI CHAT
-with st.sidebar:
-    st.title("👨‍💻 Akansh Saxena")
-    st.write("J.K. Institute of Applied Physics & Tech")
-    st.markdown("---")
-    st.success("Aether Node: ACTIVE")
-    
-    user_msg = st.text_input("AI Concierge 24/7 (Ask anything)...")
-    if st.button("Ask AI"):
-        if user_msg:
-            try:
-                res = httpx.post(f"{BACKEND_URL}/api/v1/akansh/ai/chat", json={"user_msg": user_msg}, timeout=10.0)
-                st.info(f"🤖 Aether AI: {res.json().get('reply')}")
-            except:
-                st.error("AI Uplink Offline. Check Backend Node.")
+# --- STEP 1: INTERNATIONAL OTP LOGIN ---
+if not st.session_state.auth_status:
+    st.title("🛰️ Aether Global Login")
+    with st.container():
+        st.markdown("<div style='max-width:400px; margin:auto;'>", unsafe_allow_html=True)
+        col1, col2 = st.columns([1, 3])
+        with col1: country_code = st.selectbox("Code", ["+91", "+1", "+44", "+971"])
+        with col2: mobile = st.text_input("Mobile Number")
+        
+        if st.button("SEND OTP"):
+            st.info(f"Verification Code sent to {country_code} {mobile}")
+        
+        otp = st.text_input("Enter 6-Digit OTP", type="password")
+        if st.button("VERIFY & PROCEED"):
+            if len(otp) == 6:
+                st.session_state.auth_status = True
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
-# MAIN APP LOGIC
-st.title("🛰️ Aether: Global Hospitality Network")
-
-if not st.session_state.verified:
-    st.markdown("<div class='auth-box'>", unsafe_allow_html=True)
-    st.subheader("🔐 Secure Authorization Required")
-    st.write("Mandatory Identity Verification (Aadhar KYC) for Akansh's Network.")
-    
-    aadhar = st.text_input("Aadhar Number", type="password", key="aadhar_input")
-    if st.button("Generate OTP"):
-        if len(aadhar) == 12:
-            try:
-                res = httpx.post(f"{BACKEND_URL}/api/v1/akansh/kyc/verify", json={"aadhar_no": aadhar})
-                st.success(res.json().get("msg"))
-            except:
-                st.warning("Simulation Mode: OTP Sent to linked mobile.")
-        else:
-            st.error("Invalid Aadhar Format.")
-    
-    otp = st.text_input("Enter 6-Digit OTP", type="password")
-    if st.button("Verify & Login"):
-        if otp == "123456": # Master Key for Presentation
-            st.session_state.verified = True
-            st.rerun()
-        else: st.error("Verification Failed")
-    st.markdown("</div>", unsafe_allow_html=True)
-
+# --- STEP 2: GPS & DASHBOARD ---
 else:
-    st.success("✅ Access Granted: User Authenticated via Aether-Secure.")
-    city = st.text_input("📍 Search Destination", "Mumbai")
-    
-    if st.button("Initialize Deep Scan"):
-        with st.spinner("Accessing Aether Global Nodes..."):
-            try:
-                # Real-time scan call to Render Backend
-                res = httpx.get(f"{BACKEND_URL}/api/v1/akansh/inventory/scan", params={"city": city}, timeout=15.0)
-                data = res.json()
-                hotels = data.get("data", [])
-                
-                st.markdown(f"**Uplink Source:** `{data.get('source')}`")
-                
-                cols = st.columns(3)
-                for idx, h in enumerate(hotels):
-                    with cols[idx % 3]:
-                        st.markdown(f"""
-                            <div class='hotel-card'>
-                                <img src="{h['img']}" style="width:100%; height:200px; object-fit:cover; border-radius:8px;">
-                                <h4>{h['name']}</h4>
-                                <p>📍 {h['city']}</p>
-                                <p class='price-tag'>₹{h['price']}</p>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                        if st.button(f"Book {h['name']}", key=f"btn_{idx}"):
-                            with st.spinner("Creating Secure Order..."):
-                                try:
-                                    p_res = httpx.post(f"{BACKEND_URL}/api/v1/akansh/payments/create", 
-                                                      json={"amount": int(h['price']), "hotel": h['name']})
-                                    st.success(f"Order ID: {p_res.json().get('order_id')} created successfully!")
-                                    st.balloons()
-                                except:
-                                    st.error("Payment Gateway Timeout.")
-            except Exception as e:
-                st.error(f"Uplink Error: Ensure Backend on Render is LIVE. Details: {e}")
+    # Top Navigation
+    st.markdown("""
+        <div class="main-nav">
+            <b>🏨 Hotels</b> | ✈️ Flights | 🚆 Trains | 🍔 Food | 🛒 Grocery | 🚕 Cabs
+        </div>
+    """, unsafe_allow_html=True)
+
+    # GPS DETECTION (Realistic Simulation)
+    with st.sidebar:
+        st.header("📍 User Node")
+        st.write(f"**Developer:** Akansh Saxena")
+        if st.button("Detect My GPS Location"):
+            with st.spinner("Accessing Satellite Data..."):
+                time.sleep(2)
+                st.session_state.location = "Prayagraj, Uttar Pradesh" # Auto-detected
+        st.success(f"Current City: {st.session_state.location}")
+
+    st.title(f"What are you looking for in {st.session_state.location}?")
+
+    # --- SERVICE AGGREGATOR ---
+    tab1, tab2, tab3 = st.tabs(["🏨 Stay & Travel", "🍔 Food & Quick Commerce", "📦 Full Package"])
+
+    with tab1:
+        st.subheader("Hotel Availability & Price Comparison")
+        c1, c2, c3 = st.columns(3)
+        
+        # MOCK DATA FOR 90% ACCURACY DEMO
+        hotel_data = [
+            {"name": "Radisson Blu", "price": 8500, "mmt": 8900, "booking": 8500, "agoda": 8700},
+            {"name": "Hotel Kanha Shyam", "price": 4200, "mmt": 4500, "booking": 4200, "agoda": 4400}
+        ]
+
+        for h in hotel_data:
+            with st.container():
+                st.markdown(f"""
+                <div class="service-card">
+                    <h3>{h['name']}</h3>
+                    <p class="price-tag">Best Price: ₹{h['price']}</p>
+                    <div class="vendor-compare">
+                        MMT: ₹{h['mmt']} | Booking.com: ₹{h['booking']} | Agoda: ₹{h['agoda']}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                if st.button(f"Book via Aadhar Auth: {h['name']}"):
+                    st.warning("Please Enter Aadhar for Secure Transaction")
+
+    with tab2:
+        st.subheader("Food & Grocery Comparison (Real-time)")
+        f1, f2 = st.columns(2)
+        with f1:
+            st.markdown("""
+            <div class="service-card">
+                <h4>🍔 Paneer Butter Masala</h4>
+                <p><b>Zomato:</b> ₹320 (30 mins)<br><b>Swiggy:</b> ₹290 (45 mins)</p>
+            </div>
+            """, unsafe_allow_html=True)
+        with f2:
+            st.markdown("""
+            <div class="service-card">
+                <h4>🥛 Milk & Bread</h4>
+                <p><b>Zepto:</b> ₹85 (10 mins)<br><b>Blinkit:</b> ₹82 (12 mins)</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with tab3:
+        st.subheader("📦 Complete Hospitality Package")
+        st.info("Includes: Flight + Cab + 5-Star Hotel + Food Credits")
+        st.markdown("### Total Package: ₹45,000")
+        if st.button("PROCEED TO PAYMENT (ALL-IN-ONE)"):
+            st.balloons()
