@@ -22,7 +22,7 @@ export default function LoginPage() {
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/send-otp`, {
+      const res = await fetch(`${API_URL}/api/v1/akansh/auth/send-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email })
@@ -51,7 +51,7 @@ export default function LoginPage() {
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/verify-otp`, {
+      const res = await fetch(`${API_URL}/api/v1/akansh/auth/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email, otp: otp })

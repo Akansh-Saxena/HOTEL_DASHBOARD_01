@@ -25,7 +25,8 @@ class LiveDataEngine:
         """Fetches the OAuth2 token required for Amadeus API endpoint requests."""
         if not AMADEUS_API_KEY or not AMADEUS_API_SECRET:
             logger.warning("Amadeus Keys missing. Generating Mock Token.")
-            return "mock_token"
+            self.amadeus_token = "mock_token"
+            return
             
         async with httpx.AsyncClient() as client:
             headers = {"Content-Type": "application/x-www-form-urlencoded"}
